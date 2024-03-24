@@ -1,4 +1,4 @@
-import os
+import subprocess as sp
 import tkinter as tk
 from tkinter import messagebox
 import serial
@@ -10,29 +10,65 @@ baud_rates=[110, 300, 600, 1200, 2400, 4800, 9600,14400,19200,38400,57600,115200
 
 baud_rate_val = 9600
 is_connected = False
+waiting_response = False
 com = "/dev/rfcomm0"
 
-def update_textbox(textbox, data):
-    textbox.config(state=tk.NORMAL) # unlock the textbox
-    textbox.insert(tk.END, "\n"+str(data)) # add newline and append the data
-    textbox.config(state=tk.DISABLED) # lock back the textbox to readonly
-    textbox.see(tk.END) 
 
-def send_data(serial_port, data_code):
-    serial_port.write(data_code)
+def update_textbox(textbox, message, color="black"):
+    textbox.config(state=tk.NORMAL) 
+    textbox.insert(tk.END, "\n"+str(message)) 
+    
+    if color == "red":
+        start_index = textbox.index("end-2c linestart")
+        end_index = "end-1c lineend"
+        textbox.tag_add("red_tag", start_index, end_index) 
+        textbox.tag_config("red_tag", foreground=color)
+    elif color == "green":
+        start_index = textbox.index("end-2c linestart")
+        end_index = "end-1c lineend"
+        textbox.tag_add("green_tag", start_index, end_index) 
+        textbox.tag_config("green_tag", foreground=color)
+
+    textbox.config(state=tk.DISABLED)
+    textbox.see(tk.END)
+
+#check if i actually need this
+def requst_response(text_box, data):
+    if data == 1:
+        update_textbox(text_box, "OK")
+
+def handle_input(text_box, data_received, data_send=b'0xff'):
+    if waiting_response:
+        if data_send == data_received:
+            if data_received == b'\x01':
+                update_textbox(text_box, "SNAKE: Connection established successfully", color="green")
+            if data_received == b'\x02':
+                update_textbox(text_box, "SNAKE: I am starting movement", color="green")
+            elif data_received == b'\x03':
+                update_textbox(text_box, "SNAKE: Starting calibrating", color="green")
+            elif data_received > b'\x04':
+                update_textbox(text_box, "SNAKE: Stopped moving", color="green")
+        else:
+            update_textbox(text_box, "Problem detected, data has been corrupted", color="red")
+    else:
+        if data_received > b'\x0a':
+            update_textbox(text_box, "Problem detected in module " + str(int(data_received)%10) + ". Execution of program stopped", color="red")
+        else:
+            update_textbox(text_box, "Received message without asking for it, something went wrong", color="red")
 
 class SerialThread(threading.Thread):
-    def __init__(self, serial_port):
+    def __init__(self, serial_port, textbox):
         super().__init__()
         self.serial_port = serial_port
         self.__is_running = threading.Event()
+        self.textbox = textbox
 
     def run(self):
         self.__is_running.set()
-        while self.is_running.is_set():
+        while self.__is_running.is_set():
             if self.serial_port.in_waiting > 0:
-                line = self.serial_port.readline().decode().strip()
-                print("Received: ", line)
+                message = self.serial_port.read()
+                handle_input(self.textbox, message)
 
     def stop(self):
         self.__is_running.clear()
@@ -40,6 +76,19 @@ class SerialThread(threading.Thread):
     def disconnect(self):
         self.serial_port.close()
         self.stop()
+
+    def send_data(self, data_code):
+        self.serial_port.write(data_code)
+        timeout = 2
+        start_time = time.time()
+        while True:
+            if self.serial_port.in_waiting:
+                response = self.serial_port.read()
+                handle_input(self.textbox, response, data_code)
+                break
+            elif time.time() - start_time > timeout:
+                update_textbox(self.textbox, "Timeout: no response received", color="red")
+                break
 
 class Gui:
     def __init__(self):
@@ -67,18 +116,19 @@ class Gui:
         self.move_label.place(x=510, y=10)
         self.move_label.configure(bg="black", fg="white")
 
-        self.start_button = tk.Button(self.root, text="START", font=16,command=lambda: self.show_message("Snake start request send"))
+        self.start_button = tk.Button(self.root, text="START", font=16,command=lambda: self.movement_fun("Snake start request send", b'\x02'))
+        #self.start_button = tk.Button(self.root, text="START", font=16,command=lambda: self.show_message("Snake start request send"))
         self.start_button.configure(bg="#0C7D09", fg="#16FE10", width=6,height=3)
         self.start_button.bind("<Button-3>", lambda event: self.right_click("Button which tells snake robot to start moving"))
         self.start_button.place(x=650, y=100)
 
-        self.stop_button = tk.Button(self.root, text="STOP", font=16,command=lambda: self.show_message("Snake stop request send"))
+        self.stop_button = tk.Button(self.root, text="STOP", font=16,command=lambda: self.movement_fun("Snake stop request send", b'\x03'))
         self.stop_button.configure(bg="#BF0F0F", fg="#F71923", width=6, height=3)
         self.stop_button.bind("<Button-3>", lambda event: self.right_click("Button which tells snake robot to stop moving"))
         self.stop_button.place(x=550, y=100)
         
         #self.com_box = tk.Text(self.root, height=1, width=15, bg="white")
-        self.stretch_button = tk.Button(self.root, text="STRETCH", font=16, command=lambda: self.show_message("All servos set to 0 dergees"))
+        self.stretch_button = tk.Button(self.root, text="STRETCH", font=16, command=lambda: self.movement_fun("Set all servos to 0 degrees request send", b'\x04'))
         self.stretch_button.configure(bg="#00ffff", fg="blue", width=6, height=3)
         self.stretch_button.bind("<Button-3>", lambda event: self.right_click("Set all servos in robot to zero degrees"))
         self.stretch_button.place(x=450, y=100)
@@ -130,12 +180,8 @@ class Gui:
     def on_closing(self):
         if messagebox.askyesno("Quit", message="Do you want to quit program?"):
             self.root.destroy()
-
-    def show_message(self, prompt):
-        if is_connected:
-            update_textbox(self.consoleBox, prompt + "\nWaiting for MCU response...")
-        else:
-            update_textbox(self.consoleBox, "Connection has not been set")
+            if is_connected:
+                self.serial_thread.disconnect()
 
     def right_click(self, msg):
         messagebox.showinfo(message=msg)
@@ -153,18 +199,23 @@ class Gui:
             update_textbox(self.consoleBox, "Trying to establish connection with snake's head")
             is_connected = True
             #opening serial connection and creating new thread for handling it
-            self.serial_thread = SerialThread(serial.Serial())
+            self.serial_thread = SerialThread(serial.Serial(), self.consoleBox)
             self.serial_thread.serial_port.port = com
             self.serial_thread.serial_port.baudrate = baud_rate_val
             self.serial_thread.start()
+            self.serial_thread.send_data(b'\x01')
         #another things to do when establishing connection
             
     def lose_connection(self):
         global is_connected
-        is_connected = False
         self.baud_menu.configure(state="active")
         self.com_box.configure(state="normal")
-        update_textbox(self.consoleBox, "Successfully disconected from external device")
+        self.serial_thread.disconnect()
+        if not self.serial_thread.serial_port.is_open:
+            update_textbox(self.consoleBox, "Successfully disconected from external device")
+            is_connected = False
+        else :
+            update_textbox(self.consoleBox, "Could not disconnect from external device, try again")
 
     def change_com(self, event):
         global com
@@ -176,19 +227,25 @@ class Gui:
             update_textbox(self.consoleBox, "There is no such path in the system, specify correct path")
             self.com_box.delete("1.0", tk.END)
         return "break"
-my_gui = Gui()
 
-os.system("./connect.sh")
-time.sleep(2)
+    def movement_fun(self, prompt, data):
+        if is_connected:
+            update_textbox(self.consoleBox, prompt + ", waiting for MCU response...")
+            self.serial_thread.send_data(data)
+        else:
+            update_textbox(self.consoleBox, "Connection has not been set")
 
-while True:
-    value = ser.readlines()
-    valueInString = str(value, 'UTF-8')
-    print(valueInString)
 
-print(ser.name)
-ser.write(b'hello')
-ser.close()
+if __name__ == "__main__":
+    
+    # os.system("./connect.sh")
+    # time.sleep(2)
+    process = sp.Popen("./connect.sh", stdout=sp.PIPE, stderr=sp.PIPE)
+    stdout, stderr = process.communicate()
+    stdout_str = stdout.decode()
+    stderr_str = stderr.decode()
+
+    Gui()
 
 
 

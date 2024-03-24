@@ -3,22 +3,56 @@ import tkinter as tk
 from tkinter import messagebox
 import serial
 import threading
+import time
 
 #list of baudrates
 baud_rates=[110, 300, 600, 1200, 2400, 4800, 9600,14400,19200,38400,57600,115200,128000,256000]
 
 baud_rate_val = 9600
 is_connected = False
+waiting_response = False
 com = "/dev/rfcomm0"
 
-def update_textbox(textbox, data):
-    textbox.config(state=tk.NORMAL) # unlock the textbox
-    textbox.insert(tk.END, "\n"+str(data)) # add newline and append the data
-    textbox.config(state=tk.DISABLED) # lock back the textbox to readonly
+def update_textbox(textbox, message, color="black"):
+    textbox.config(state=tk.NORMAL) 
+    textbox.insert(tk.END, "\n"+str(message)) 
+    
+    if color == "red":
+        start_index = textbox.index("end-2c linestart")
+        end_index = "end-1c lineend"
+        textbox.tag_add("red_tag", start_index, end_index) 
+        textbox.tag_config("red_tag", foreground=color)
+    elif color == "green":
+        start_index = textbox.index("end-2c linestart")
+        end_index = "end-1c lineend"
+        textbox.tag_add("green_tag", start_index, end_index) 
+        textbox.tag_config("green_tag", foreground=color)
+
+    textbox.config(state=tk.DISABLED)
     textbox.see(tk.END) 
 
 def send_data(serial_port, data_code):
     serial_port.write(data_code)
+
+def handle_input(text_box, data_received, data_send=b'0xff'):
+    if waiting_response:
+        if data_send == data_received:
+            if data_received == b'\x01':
+                udpdate_textbox(text_box, "SNAKE: Connection established successfully", color="green")
+            if data_received == b'\x02':
+                update_textbox(text_box, "SNAKE: I am starting movement", color="green")
+            elif data_received == b'\x03':
+                update_textbox(text_box, "SNAKE: Starting calibrating", color="green")
+            elif data_received > b'\x04':
+                update_textbox(text_box, "SNAKE: Stopped moving", color="green")
+        else:
+            update_textbox(text_box, "Problem detected, data has been corrupted", color="red")
+    else:
+        if data_received > b'\x0a':
+            update_textbox(text_box, "Problem detected in module " + str(int(data_received)%10) + ". Execution of program stopped", color="red")
+        else:
+            update_textbox(text_box, "Received message without asking for it, something went wrong", color="red")
+
 
 class SerialThread(threading.Thread):
     def __init__(self, serial_port):
@@ -38,6 +72,20 @@ class SerialThread(threading.Thread):
     
     def disconnect(self):
         self.serial_port.close()
+        self.stop()
+
+    def send_data(self, data_code):
+        self.serial_port.write(data_code)
+        timeout = 2
+        start_time = time.time()
+        while True:
+            if self.serial_port.in_waiting:
+                response = self.serial_port.read()
+                handle_input(self.textbox, response, data_code)
+                break
+            elif time.time() - start_time > timeout:
+                update_textbox(self.textbox, "Timeout: no response received", color="red")
+                break
 
 class Gui:
     def __init__(self):
@@ -129,7 +177,7 @@ class Gui:
 
     def show_message(self, prompt):
         if is_connected:
-            update_textbox(self.consoleBox, prompt + "\nWaiting for MCU response...")
+            update_textbox(self.consoleBox, prompt + "\nWaiting for MCU response...", color="green")
         else:
             update_textbox(self.consoleBox, "Connection has not been set")
 
@@ -167,4 +215,7 @@ class Gui:
             update_textbox(self.consoleBox, "There is no such path in the system, specify correct path")
             self.com_box.delete("1.0", tk.END)
         return "break"
-my_gui = Gui()
+    
+
+if __name__ == "__main__":
+    my_gui = Gui()
