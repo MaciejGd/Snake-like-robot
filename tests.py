@@ -2,6 +2,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 import serial
+import threading
 
 #list of baudrates
 baud_rates=[110, 300, 600, 1200, 2400, 4800, 9600,14400,19200,38400,57600,115200,128000,256000]
@@ -18,6 +19,25 @@ def update_textbox(textbox, data):
 
 def send_data(serial_port, data_code):
     serial_port.write(data_code)
+
+class SerialThread(threading.Thread):
+    def __init__(self, serial_port):
+        super().__init__()
+        self.serial_port = serial_port
+        self.__is_running = threading.Event()
+
+    def run(self):
+        self.__is_running.set()
+        while self.is_running.is_set():
+            if self.serial_port.in_waiting > 0:
+                line = self.serial_port.readline().decode().strip()
+                print("Received: ", line)
+
+    def stop(self):
+        self.__is_running.clear()
+    
+    def disconnect(self):
+        self.serial_port.close()
 
 class Gui:
     def __init__(self):
