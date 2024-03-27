@@ -76,12 +76,15 @@ class SerialThread(threading.Thread):
         self.__is_running.clear()
     
     def disconnect(self):
+        self.send_data(b'\x05')
         self.serial_port.close()
         self.stop()
 
     def send_data(self, data_code):
+        global waiting_response
+        waiting_response = True
         self.serial_port.write(data_code)
-        timeout = 2
+        timeout = 5
         start_time = time.time()
         while True:
             if self.serial_port.in_waiting:
@@ -91,6 +94,7 @@ class SerialThread(threading.Thread):
             elif time.time() - start_time > timeout:
                 update_textbox(self.textbox, "Timeout: no response received", color="red")
                 break
+        waiting_response=False
 
 class Gui:
     def __init__(self):
@@ -204,10 +208,7 @@ class Gui:
             update_textbox(self.consoleBox, "Trying to establish connection with snake's head")
             is_connected = True
             #opening serial connection and creating new thread for handling it
-            self.serial_thread = SerialThread(serial.Serial(), self.consoleBox)
-            self.serial_thread.serial_port.port = com
-            self.serial_thread.serial_port.baudrate = baud_rate_val
-            self.serial_thread.start()
+            self.serial_thread = SerialThread(serial.Serial(port=com, baudrate=baud_rate_val), self.consoleBox)
             self.serial_thread.send_data(CONNECTION)
         #another things to do when establishing connection
             
