@@ -1,3 +1,4 @@
+import os
 import subprocess as sp
 import tkinter as tk
 from tkinter import messagebox
@@ -13,6 +14,10 @@ is_connected = False
 waiting_response = False
 com = "/dev/rfcomm0"
 
+CONNECTION = b'\x01'
+MOVING = b'\x02'
+STOPPED = b'\x04'
+CALIBRATED = b'\x03'
 
 def update_textbox(textbox, message, color="black"):
     textbox.config(state=tk.NORMAL) 
@@ -32,27 +37,24 @@ def update_textbox(textbox, message, color="black"):
     textbox.config(state=tk.DISABLED)
     textbox.see(tk.END)
 
-#check if i actually need this
-def requst_response(text_box, data):
-    if data == 1:
-        update_textbox(text_box, "OK")
-
 def handle_input(text_box, data_received, data_send=b'0xff'):
     if waiting_response:
         if data_send == data_received:
-            if data_received == b'\x01':
+            if data_received == CONNECTION:
                 update_textbox(text_box, "SNAKE: Connection established successfully", color="green")
-            if data_received == b'\x02':
+            if data_received == MOVING:
                 update_textbox(text_box, "SNAKE: I am starting movement", color="green")
-            elif data_received == b'\x03':
+            elif data_received == CALIBRATED:
                 update_textbox(text_box, "SNAKE: Starting calibrating", color="green")
-            elif data_received > b'\x04':
-                update_textbox(text_box, "SNAKE: Stopped moving", color="green")
+            elif data_received == STOPPED:
+                update_textbox(text_box, "SNAKE: Stopped", color="green")
         else:
             update_textbox(text_box, "Problem detected, data has been corrupted", color="red")
     else:
-        if data_received > b'\x0a':
-            update_textbox(text_box, "Problem detected in module " + str(int(data_received)%10) + ". Execution of program stopped", color="red")
+        if data_received > b'\x14':
+            update_textbox(text_box, "Timeout in module " + str(int(data_received)%10) + ". Execution of program stopped", color="red")
+        elif data_received > b'\x0a':
+            update_textbox(text_box, "Crc not equal in module " + str(int(data_received)%10) + ". Execution of program stopped", color="red")
         else:
             update_textbox(text_box, "Received message without asking for it, something went wrong", color="red")
 
@@ -105,7 +107,7 @@ class Gui:
         self.console_menu.add_command(label="Clear", command=self.clear)
         self.menubar.add_cascade(menu=self.console_menu, label="Output")
         self.root.config(menu=self.menubar)
-
+	
         #line between connection and movement
         self.canvas = tk.Canvas(self.root, width=2, height=195)
         self.canvas.place(x=399, y=10)
@@ -116,19 +118,19 @@ class Gui:
         self.move_label.place(x=510, y=10)
         self.move_label.configure(bg="black", fg="white")
 
-        self.start_button = tk.Button(self.root, text="START", font=16,command=lambda: self.movement_fun("Snake start request send", b'\x02'))
+        self.start_button = tk.Button(self.root, text="START", font=16,command=lambda: self.movement_fun("Snake start request send", MOVING))
         #self.start_button = tk.Button(self.root, text="START", font=16,command=lambda: self.show_message("Snake start request send"))
         self.start_button.configure(bg="#0C7D09", fg="#16FE10", width=6,height=3)
         self.start_button.bind("<Button-3>", lambda event: self.right_click("Button which tells snake robot to start moving"))
         self.start_button.place(x=650, y=100)
 
-        self.stop_button = tk.Button(self.root, text="STOP", font=16,command=lambda: self.movement_fun("Snake stop request send", b'\x03'))
+        self.stop_button = tk.Button(self.root, text="STOP", font=16,command=lambda: self.movement_fun("Snake stop request send", STOPPED))
         self.stop_button.configure(bg="#BF0F0F", fg="#F71923", width=6, height=3)
         self.stop_button.bind("<Button-3>", lambda event: self.right_click("Button which tells snake robot to stop moving"))
         self.stop_button.place(x=550, y=100)
         
         #self.com_box = tk.Text(self.root, height=1, width=15, bg="white")
-        self.stretch_button = tk.Button(self.root, text="STRETCH", font=16, command=lambda: self.movement_fun("Set all servos to 0 degrees request send", b'\x04'))
+        self.stretch_button = tk.Button(self.root, text="CALIBRATE", font=16, command=lambda: self.movement_fun("Set all servos to 0 degrees request send", CALIBRATED))
         self.stretch_button.configure(bg="#00ffff", fg="blue", width=6, height=3)
         self.stretch_button.bind("<Button-3>", lambda event: self.right_click("Set all servos in robot to zero degrees"))
         self.stretch_button.place(x=450, y=100)
@@ -169,6 +171,9 @@ class Gui:
         self.consoleBox = tk.Text(self.root, height=15, width=95, bg="white")
         self.consoleBox.place(x=15, y=220)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        update_textbox(self.consoleBox, stdout)
+        update_textbox(self.consoleBox, stderr, color="red")
+
         self.root.mainloop()
 
     def baud_change(self, selected_arg):
@@ -203,7 +208,7 @@ class Gui:
             self.serial_thread.serial_port.port = com
             self.serial_thread.serial_port.baudrate = baud_rate_val
             self.serial_thread.start()
-            self.serial_thread.send_data(b'\x01')
+            self.serial_thread.send_data(CONNECTION)
         #another things to do when establishing connection
             
     def lose_connection(self):
@@ -237,13 +242,11 @@ class Gui:
 
 
 if __name__ == "__main__":
-    
-    # os.system("./connect.sh")
-    # time.sleep(2)
+
     process = sp.Popen("./connect.sh", stdout=sp.PIPE, stderr=sp.PIPE)
     stdout, stderr = process.communicate()
-    stdout_str = stdout.decode()
-    stderr_str = stderr.decode()
+    stdout_str = stdout.decode("utf-8")
+    stderr_str = stderr.decode("utf-8")
 
     Gui()
 
