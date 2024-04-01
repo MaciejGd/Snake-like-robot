@@ -1,5 +1,4 @@
 #!/usr/bin/bash
-
 #actual mac address of HC-05 module: 58:56:00:01:06:36
 MAC_HC="58:56:00:01:06:36"
 #MAC_HC="5C:F6:DC:40:C6:DD"
@@ -7,8 +6,6 @@ MAC_HC="58:56:00:01:06:36"
 #check for MAC addresses connected to ports of rfcomm
 MAC_CON=$(rfcomm -a | grep "$MAC_HC")
 rfcomm_port=0
-
-
 
 if [ -n "$MAC_CON" ]; then
 	 echo "HC-05 module already connected to: $MAC_CON"
