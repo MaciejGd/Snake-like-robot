@@ -162,7 +162,7 @@ uint8_t crc8(uint8_t *buffer, uint8_t buff_len)
 
 //return 1 if there is no error in calc and 0 if there is
 
-void preparePackets(uint8_t *buffer, uint8_t slave_id, uint8_t servo_hor, uint8_t servo_ver)
+void preparePackets(uint8_t *buffer, const uint8_t slave_id, const uint8_t servo_hor, const uint8_t servo_ver)
 {
 	buffer[0] = slave_id;
 	buffer[1] = servo_hor;
@@ -170,14 +170,14 @@ void preparePackets(uint8_t *buffer, uint8_t slave_id, uint8_t servo_hor, uint8_
 	buffer[3] = crc8(buffer, 3);
 }
 
-uint8_t map(double sin_val, uint8_t max_val)
+uint8_t map(double sin_val, const uint8_t max_val)
 {
 	double multiplier = max_val - ZERO_SERVO;
 	uint8_t mapped_val = sin_val * multiplier + ZERO_SERVO;
 	return mapped_val;
 }
 
-void init_sin_values(uint8_t* sin_arr, uint8_t max_val, double period, double offset)
+void init_sin_values(uint8_t* sin_arr, const uint8_t max_val, const double period, const double offset)
 {
 	double alfa = period / (double)PTS_NUM;
 	double curr_sin;
