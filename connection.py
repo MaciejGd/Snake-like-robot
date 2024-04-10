@@ -44,6 +44,7 @@ def update_textbox(textbox, message, color="black"):
     textbox.see(tk.END)
 
 def handle_input(text_box, data_received, data_send=b'0xff'):
+    global is_connected
     if waiting_response:
         if data_send == data_received:
             if data_received == CONNECTION:
@@ -216,7 +217,6 @@ class Gui:
             update_textbox(self.consoleBox, "Connection has not been set")
     
     def establish_connection(self):
-        global is_connected
         if not is_connected:
             self.baud_menu.configure(state="disabled")
             self.com_box.configure(state="disabled")
@@ -241,9 +241,9 @@ class Gui:
 
     def on_closing(self):
         if messagebox.askyesno("Quit", message="Do you want to quit program?"):
-            self.root.destroy()
             if is_connected:
                 self.lose_connection()
+            self.root.destroy()
                 
 if __name__ == "__main__":
 
