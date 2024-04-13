@@ -18,10 +18,10 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include <math.h>
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -90,7 +90,7 @@ static void MX_USART2_UART_Init(void);
 void sendData(const uint8_t *data)
 {
 	HAL_GPIO_WritePin(TX_EN_GPIO_Port,TX_EN_Pin, GPIO_PIN_SET);
-	HAL_UART_Transmit(&huart1, data, 3, 1000);
+	HAL_UART_Transmit(&huart1, data, 4, 1000);
 	HAL_GPIO_WritePin(TX_EN_GPIO_Port,TX_EN_Pin, GPIO_PIN_RESET);
 }
 
@@ -104,23 +104,21 @@ void handle_bluetooth(const uint8_t *data)
 	switch (*data)
 	{
 	case 2:
-		sendBluetooth(data);
 		state=MOVING;
 		break;
 	case 3:
-		sendBluetooth(data);
 		state=CALIBRATE;
 		break;
 	case 4:
-		sendBluetooth(data);
 		state=STOPPED;
 		break;
 	case 5:
 		state=STOPPED;
+		break;
 	default:
-		sendBluetooth(data);
 		break;
 	}
+	sendBluetooth(data);
 }
 
 void check_crc(const uint8_t *rx_buff, const uint8_t *tx_buff)
@@ -136,15 +134,15 @@ void check_crc(const uint8_t *rx_buff, const uint8_t *tx_buff)
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
-	if (huart->Instance==USART1)
-	{
-		check_crc(RX_DATA, TX_DATA);
-		HAL_UARTEx_ReceiveToIdle_IT(huart, RX_DATA, 3);
-	}
-	else if (huart->Instance==USART2)
+	if (huart->Instance==USART2)
 	{
 		handle_bluetooth(&BLU_BUFF);
 		HAL_UARTEx_ReceiveToIdle_IT(huart, &BLU_BUFF, 1);
+	}
+	else if (huart->Instance==USART1)
+	{
+		check_crc(RX_DATA, TX_DATA);
+		HAL_UARTEx_ReceiveToIdle_IT(huart, RX_DATA, 4);
 	}
 }
 
@@ -212,22 +210,23 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  HAL_Delay(100);
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  HAL_Delay(100);
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_UARTEx_ReceiveToIdle_IT(&huart2, &BLU_BUFF, 1);
-  uint8_t count_modules;
+  HAL_UARTEx_ReceiveToIdle_IT(&huart1, RX_DATA, 4);
+  uint8_t count_modules = 1;
   uint8_t current_point = 0;
   uint8_t SinArrHor[PTS_NUM];
   uint8_t SinArrVer[PTS_NUM];
   init_sin_values(SinArrHor, HOR_MAX_VAL, HOR_PERIOD, HOR_OFFSET);
   init_sin_values(SinArrVer, VER_MAX_VAL, VER_PERIOD, VER_OFFSET);
+  uint8_t index_module = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -238,21 +237,26 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-	  for (count_modules = 1; count_modules < MODULES_AMOUNT && state==MOVING; count_modules++)
+	  for (; count_modules <= MODULES_AMOUNT && state==MOVING; count_modules++)
 	  {
-		  preparePackets(TX_DATA, count_modules, SinArrHor[current_point], SinArrVer[current_point]);
+		  index_module = ((PTS_NUM/MODULES_AMOUNT) * (count_modules - 1) + current_point) % PTS_NUM;
+		  preparePackets(TX_DATA, count_modules, SinArrHor[index_module], SinArrVer[index_module]);
 		  sendData(TX_DATA);
-	  	  HAL_Delay(100);
+	  	  HAL_Delay(5);
 	  }
 	  if (state==MOVING)
 	  {
 		  current_point++;
 		  current_point = current_point % PTS_NUM;
+		  if (count_modules > MODULES_AMOUNT)
+			  count_modules = 1;
   	  }
 	  else if (state==CALIBRATE)
 	  {
+		  HAL_Delay(5);
 		  preparePackets(TX_DATA, CALIBRATE_ID, 150, 150);
-		  count_modules = 0;
+		  sendData(TX_DATA);
+		  count_modules = 1;
 		  current_point = 0;
 		  state=STOPPED;
 	  }

@@ -56,6 +56,8 @@ def handle_input(text_box, data_received, data_send=b'0xff'):
                 update_textbox(text_box, "SNAKE: Starting calibrating", color="green")
             elif data_received == STOPPED:
                 update_textbox(text_box, "SNAKE: Stopped", color="green")
+            elif data_received == DISCONNECT:
+                update_textbox(text_box, "Disconnect request successfully received", color="green")
         else:
             update_textbox(text_box, "Problem detected, data has been corrupted", color="red")
     else:
@@ -165,7 +167,7 @@ class Gui:
         self.com_label.place(x=50, y=53)
 
         #setting path for serial port
-        self.com_box = tk.Text(self.root, height=1, width=15, bg="white")
+        self.com_box = tk.Text(self.root, height=1, width=15, bg="white", wrap="none")
         self.com_box.place(x=50, y=81)
         self.com_box.insert(tk.END, com) 
         self.com_box.bind("<Return>", self.change_com)
@@ -183,7 +185,17 @@ class Gui:
         update_textbox(self.consoleBox, stdout)
         update_textbox(self.consoleBox, stderr, color="red")
 
+        self.check_connection_status()
         self.root.mainloop()
+
+    def check_connection_status(self):
+        if is_connected:
+            self.com_box.configure(state="disabled")
+            self.baud_menu.configure(state="disabled")
+        else :
+            self.com_box.configure(state="normal")
+            self.baud_menu.configure(state="active")
+        self.root.after(500, self.check_connection_status)
 
     def clear(self):
         self.consoleBox.config(state=tk.NORMAL)
@@ -195,16 +207,21 @@ class Gui:
             global baud_rate_val
             update_textbox(self.consoleBox, "Value of baudrate changed from "+ str(baud_rate_val) + " to " + str(selected_arg))
             baud_rate_val = self.variable.get()
+
     
     def change_com(self, event):
         global com
-        if exists(self.com_box.get("1.0",tk.END).strip()):
-            com = self.com_box.get("1.0", tk.END).strip()
-            update_textbox(self.consoleBox, "Path successfully changed")
-            print(com)
-        else:
-            update_textbox(self.consoleBox, "There is no such path in the system, specify correct path", color="red")
-            self.com_box.delete("1.0", tk.END)
+        if not is_connected:
+            new_path = self.com_box.get("1.0", tk.END).strip()
+            if exists(new_path):
+                com = new_path
+                update_textbox(self.consoleBox, "Path successfully changed")
+                print(com)
+            else:
+                update_textbox(self.consoleBox, f"There is no such path as {new_path} in the system, specify correct path", color="red")
+                self.com_box.delete("1.0", tk.END)
+            if event.keysym == "Return":
+                return "break"
 
     def right_click(self, msg):
         messagebox.showinfo(message=msg)
@@ -218,8 +235,6 @@ class Gui:
     
     def establish_connection(self):
         if not is_connected:
-            self.baud_menu.configure(state="disabled")
-            self.com_box.configure(state="disabled")
             update_textbox(self.consoleBox, "Trying to establish connection with snake's head")
             #opening serial connection and creating new thread for handling it
             self.serial_thread = SerialThread(serial.Serial(port=com, baudrate=baud_rate_val), self.consoleBox)
