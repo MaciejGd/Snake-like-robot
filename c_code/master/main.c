@@ -59,6 +59,7 @@ uint8_t RX_DATA[4];
 uint8_t TX_DATA[4];
 uint8_t BLU_BUFF;
 uint8_t CALIBRATE_ID = 20;
+uint8_t STARTUP = 1;
 //enumerators defining state and errors in robot
 typedef enum {
 	NO_ERROR = 0,
@@ -73,7 +74,7 @@ typedef enum {
 } robot_state;
 
 uint8_t ERROR_VAL = NO_ERROR;
-uint8_t state = STOPPED;
+uint8_t STATE = STOPPED;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -104,16 +105,16 @@ void handle_bluetooth(const uint8_t *data)
 	switch (*data)
 	{
 	case 2:
-		state=MOVING;
+		STATE=MOVING;
 		break;
 	case 3:
-		state=CALIBRATE;
+		STATE=CALIBRATE;
 		break;
 	case 4:
-		state=STOPPED;
+		STATE=STOPPED;
 		break;
 	case 5:
-		state=STOPPED;
+		STATE=STOPPED;
 		break;
 	default:
 		break;
@@ -236,31 +237,42 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  if (STATE==MOVING)
+	  {
+		  for (; count_modules <= MODULES_AMOUNT && STATE==MOVING; count_modules++)
+		  {
+			  index_module = ((PTS_NUM/MODULES_AMOUNT) * (count_modules - 1) + current_point) % PTS_NUM;
 
-	  for (; count_modules <= MODULES_AMOUNT && state==MOVING; count_modules++)
-	  {
-		  index_module = ((PTS_NUM/MODULES_AMOUNT) * (count_modules - 1) + current_point) % PTS_NUM;
-		  preparePackets(TX_DATA, count_modules, SinArrHor[index_module], SinArrVer[index_module]);
-		  sendData(TX_DATA);
-	  	  HAL_Delay(5);
-	  }
-	  if (state==MOVING)
-	  {
+			  if (STARTUP)
+				  preparePackets(TX_DATA, count_modules+40, SinArrHor[index_module], SinArrVer[index_module]);
+			  else
+				  preparePackets(TX_DATA, count_modules, SinArrHor[index_module], SinArrVer[index_module]);
+
+			  sendData(TX_DATA);
+			  HAL_Delay(5);
+		  }
+		  if (STARTUP)
+		  {
+			  HAL_Delay(300);
+			  STARTUP = 0;
+		  }
 		  current_point++;
-		  current_point = current_point % PTS_NUM;
-		  if (count_modules > MODULES_AMOUNT)
-			  count_modules = 1;
-  	  }
-	  else if (state==CALIBRATE)
+  		  current_point = current_point % PTS_NUM;
+  		  if (count_modules > MODULES_AMOUNT)
+  			  count_modules = 1;
+	  }
+
+	  else if (STATE==CALIBRATE)
 	  {
 		  HAL_Delay(5);
 		  preparePackets(TX_DATA, CALIBRATE_ID, 150, 150);
 		  sendData(TX_DATA);
 		  count_modules = 1;
 		  current_point = 0;
-		  state=STOPPED;
+		  STATE=STOPPED;
+		  STARTUP = 1;
 	  }
-	  else if (state==STOPPED)
+	  else if (STATE==STOPPED)
 	  {
 		  continue;
 	  }

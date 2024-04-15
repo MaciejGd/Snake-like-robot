@@ -21,7 +21,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,12 +44,16 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-uint8_t SLAVE_ID = 3;
+uint8_t SLAVE_ID = 2;
+uint8_t STARTUP_ID = 42;
+int OFFSET_HOR = -5;
+int OFFSET_VER = -10;
 uint8_t CALIBRATE_ID = 20;
 uint8_t TX_DATA[4];
 uint8_t RX_DATA[4];
-uint8_t servo_vertical = 150;
-uint8_t servo_horizontal = 150;
+uint8_t STARTUP_REQUEST = 0;
+uint8_t DESIRED_HOR;
+uint8_t DESIRED_VER;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,20 +92,18 @@ void prepare_data()
 	TX_DATA[3] = crc8(RX_DATA, 3);
 }
 
-void move(TIM_HandleTypeDef *timer, uint8_t actual_pos, uint8_t des_hor, uint8_t des_ver)
+void slower_move(uint8_t desired_pos_hor, uint8_t desired_pos_ver)
 {
-	int actuator_hor = (des_hor > timer->Instance->CCR1) ? 1 : (-1);
-	int actuator_ver = (des_ver > timer->Instance->CCR3) ? 1 : (-1);
-	while (1)
+
+	int add_hor = (desired_pos_hor > htim3.Instance->CCR1)? 1 : -1;
+	int add_ver = (desired_pos_ver > htim3.Instance->CCR3)? 1 : -1;
+
+	while (desired_pos_hor != htim3.Instance->CCR1 || desired_pos_ver != htim3.Instance->CCR3)
 	{
-		if (timer->Instance->CCR1 != des_hor)
-			timer->Instance->CCR1+=actuator_hor;
-
-		if (timer->Instance->CCR3 != des_ver)
-			timer->Instance->CCR3+=actuator_ver;
-
-		if (timer->Instance->CCR1 == des_hor && timer->Instance->CCR3 == des_ver)
-			break;
+		if (desired_pos_hor != htim3.Instance->CCR1)
+			htim3.Instance->CCR1+=add_hor;
+		if (desired_pos_ver != htim3.Instance->CCR3)
+			htim3.Instance->CCR3+=add_ver;
 		HAL_Delay(5);
 	}
 
@@ -112,17 +113,28 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
 	if (RX_DATA[0]==SLAVE_ID)
 	{
-		htim3.Instance->CCR1 = RX_DATA[1];
-		htim3.Instance->CCR3 = RX_DATA[2];
+		htim3.Instance->CCR1 = RX_DATA[1] + OFFSET_HOR;
+		htim3.Instance->CCR3 = RX_DATA[2] + OFFSET_VER;
 		prepare_data();
 		sendData(TX_DATA);
+		HAL_UARTEx_ReceiveToIdle_IT(&huart1, RX_DATA, 4);
 	}
 	else if (RX_DATA[0]==CALIBRATE_ID)
 	{
-		htim3.Instance->CCR1 = RX_DATA[1];
-		htim3.Instance->CCR3 = RX_DATA[2];
+		DESIRED_HOR = RX_DATA[1] + OFFSET_HOR;
+		DESIRED_VER = RX_DATA[2] + OFFSET_VER;
+		STARTUP_REQUEST = 1;
 	}
-	HAL_UARTEx_ReceiveToIdle_IT(&huart1, RX_DATA, 4);
+	else if (RX_DATA[0]==STARTUP_ID)
+	{
+		htim3.Instance->CCR1 = 150;
+		htim3.Instance->CCR3 = 150;
+		DESIRED_HOR = RX_DATA[1] + OFFSET_HOR;
+		DESIRED_VER = RX_DATA[2] + OFFSET_VER;
+		STARTUP_REQUEST = 1;
+	}
+	else
+		HAL_UARTEx_ReceiveToIdle_IT(&huart1, RX_DATA, 4);
 }
 
 
@@ -171,7 +183,15 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+	  if (STARTUP_REQUEST)
+	  {
+		  HAL_UART_AbortReceive(&huart1);
+		  __HAL_UART_DISABLE_IT(&huart1, UART_IT_RXNE);
+		  slower_move(DESIRED_HOR, DESIRED_VER);
+		  __HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);
+		  STARTUP_REQUEST = 0;
+		  HAL_UARTEx_ReceiveToIdle_IT(&huart1, RX_DATA, 4);
+	  }
     /* USER CODE BEGIN 3 */
 
   }
