@@ -45,21 +45,27 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 //values to count servo positions
-uint8_t PTS_NUM = 45;
+uint8_t PTS_NUM = 54;
 uint8_t ZERO_SERVO = 150;
 uint8_t MODULES_AMOUNT = 9;
-uint8_t HOR_MAX_VAL = 180;
-uint8_t VER_MAX_VAL = 166;
-double HOR_PERIOD = 2 * M_PI;
-double VER_PERIOD = 4 * M_PI;
+uint8_t HOR_MAX_VAL = 195;
+uint8_t VER_MAX_VAL = 170;
+double HOR_PERIOD = 4 * M_PI;
+double VER_PERIOD = 8 * M_PI;
 double HOR_OFFSET = 0;
-double VER_OFFSET = (-1.0/2.0) * M_PI;
+double VER_OFFSET = (4.0/5.0)*M_PI;
+//double VER_OFFSET = (-1.0/4.0)*(M_PI);
+double VER_OFFSET_LEFT = 0;
+double VER_OFFSET_RIGHT = M_PI;
+//double VER_OFFSET = (-1.0/2.0)*(M_PI);
 //data buffers for communication
 uint8_t RX_DATA[4];
 uint8_t TX_DATA[4];
 uint8_t BLU_BUFF;
 uint8_t CALIBRATE_ID = 20;
 uint8_t STARTUP = 1;
+uint8_t LEFT = 0;
+uint8_t RIGHT = 0;
 //enumerators defining state and errors in robot
 typedef enum {
 	NO_ERROR = 0,
@@ -106,15 +112,29 @@ void handle_bluetooth(const uint8_t *data)
 	{
 	case 2:
 		STATE=MOVING;
+		LEFT=0;
+		RIGHT=0;
 		break;
 	case 3:
 		STATE=CALIBRATE;
+		LEFT=0;
+		RIGHT=0;
 		break;
 	case 4:
 		STATE=STOPPED;
 		break;
 	case 5:
 		STATE=STOPPED;
+		break;
+	case 6:
+		STATE=MOVING;
+		LEFT=1;
+		RIGHT=0;
+		break;
+	case 7:
+		STATE=MOVING;
+		RIGHT=1;
+		LEFT=0;
 		break;
 	default:
 		break;
@@ -225,8 +245,23 @@ int main(void)
   uint8_t current_point = 0;
   uint8_t SinArrHor[PTS_NUM];
   uint8_t SinArrVer[PTS_NUM];
+  uint8_t SinArrHorLeft[PTS_NUM];
+  uint8_t SinArrVerLeft[PTS_NUM];
+  uint8_t SinArrHorRight[PTS_NUM];
+  uint8_t SinArrVerRight[PTS_NUM];
+  //uint8_t SinVarVer[72] = {160,160,160,160,160,150,150,150,150,150,150,150,150,140,140,140,140,140,
+//		  160,160,160,160,160,150,150,150,150,150,150,150,150,140,140,140,140,140,
+//		  160,160,160,160,160,150,150,150,150,150,150,150,150,140,140,140,140,140,
+//		  160,160,160,160,160,150,150,150,150,150,150,150,150,140,140,140,140,140};
+//  uint8_t SinVarVer[72] = {159,158,157,156,155,154,153,152,151,150,149,148,147,146,145,144,143,142,141,159,158,157,156,155,154,153,152,151,150,149,148,147,146,145,144,143,142,141,
+//  159,158,157,156,155,154,153,152,151,150,149,148,147,146,145,144,143,142,141,159,158,157,156,155,154,153,152,151,150,149,148,147,146,145};
+
   init_sin_values(SinArrHor, HOR_MAX_VAL, HOR_PERIOD, HOR_OFFSET);
   init_sin_values(SinArrVer, VER_MAX_VAL, VER_PERIOD, VER_OFFSET);
+  init_sin_values(SinArrHorLeft, HOR_MAX_VAL, HOR_PERIOD, HOR_OFFSET);
+  init_sin_values(SinArrVerLeft, VER_MAX_VAL, HOR_PERIOD, VER_OFFSET_LEFT);
+  init_sin_values(SinArrHorRight, HOR_MAX_VAL, HOR_PERIOD, HOR_OFFSET);
+  init_sin_values(SinArrVerRight, VER_MAX_VAL, HOR_PERIOD, VER_OFFSET_RIGHT);
   uint8_t index_module = 0;
   /* USER CODE END 2 */
 
@@ -241,15 +276,24 @@ int main(void)
 	  {
 		  for (; count_modules <= MODULES_AMOUNT && STATE==MOVING; count_modules++)
 		  {
-			  index_module = ((PTS_NUM/MODULES_AMOUNT) * (count_modules - 1) + current_point) % PTS_NUM;
+			  index_module = ((PTS_NUM/MODULES_AMOUNT) * (MODULES_AMOUNT - count_modules) + current_point) % PTS_NUM;
+			  //index_module = PTS_NUM - 1 - (((PTS_NUM/MODULES_AMOUNT)*(count_modules-1) + current_point) % PTS_NUM);
 
 			  if (STARTUP)
-				  preparePackets(TX_DATA, count_modules+40, SinArrHor[index_module], SinArrVer[index_module]);
+				  if (LEFT)
+					  preparePackets(TX_DATA, count_modules+40, SinArrHorLeft[index_module], SinArrVerLeft[index_module]);
+				  else if (RIGHT)
+					  preparePackets(TX_DATA, count_modules+40, SinArrHorRight[index_module], SinArrVerRight[index_module]);
+				  else
+					  preparePackets(TX_DATA, count_modules+40, SinArrHor[index_module], SinArrVer[index_module]);
+			  else if (LEFT)
+				  preparePackets(TX_DATA, count_modules, SinArrHorLeft[index_module], SinArrVerLeft[index_module]);
+			  else if (RIGHT)
+				  preparePackets(TX_DATA, count_modules, SinArrHorRight[index_module], SinArrVerRight[index_module]);
 			  else
 				  preparePackets(TX_DATA, count_modules, SinArrHor[index_module], SinArrVer[index_module]);
-
 			  sendData(TX_DATA);
-			  HAL_Delay(5);
+			  HAL_Delay(10);
 		  }
 		  if (STARTUP)
 		  {
@@ -258,7 +302,7 @@ int main(void)
 		  }
 		  current_point++;
   		  current_point = current_point % PTS_NUM;
-  		  if (count_modules > MODULES_AMOUNT)
+  		  if (count_modules >= MODULES_AMOUNT)
   			  count_modules = 1;
 	  }
 
