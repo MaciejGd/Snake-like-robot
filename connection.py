@@ -24,6 +24,8 @@ MOVING = b'\x02'
 CALIBRATED = b'\x03'
 STOPPED = b'\x04'
 DISCONNECT = b'\x05'
+LEFT = b'\x06'
+RIGHT = b'\x07'
 
 def update_textbox(textbox, message, color="black"):
     textbox.config(state=tk.NORMAL) 
@@ -58,12 +60,14 @@ def handle_input(text_box, data_received, data_send=b'0xff'):
                 update_textbox(text_box, "SNAKE: Stopped", color="green")
             elif data_received == DISCONNECT:
                 update_textbox(text_box, "Disconnect request successfully received", color="green")
+            elif data_received == LEFT:
+                update_textbox(text_box, "SNAKE: moving left", color="green")
+            elif data_received == RIGHT:
+                update_textbox(text_box, "SNAKE: moving right", color="green")
         else:
             update_textbox(text_box, "Problem detected, data has been corrupted", color="red")
     else:
-        if data_received > b'\x14' and data_received < '\x0a':
-            update_textbox(text_box, "Timeout in module " + str(int(data_received)%10) + ". Execution of program stopped", color="red")
-        elif data_received > b'\x0a' and data_received < '\x1e':
+        if data_received > b'\x0a' and data_received < '\x1e':
             update_textbox(text_box, "Crc not equal in module " + str(int(data_received)%10) + ". Execution of program stopped", color="red")
         else:
             update_textbox(text_box, "Received message without asking for it, something went wrong", color="red")
@@ -132,19 +136,28 @@ class Gui:
         self.move_label.configure(bg="black", fg="white")
 
         self.start_button = tk.Button(self.root, text="START", font=16,command=lambda: self.movement_fun("Snake start request send", MOVING))
-        self.start_button.configure(bg="#0C7D09", fg="#16FE10", width=6,height=3)
+        self.start_button.configure(bg="#0C7D09", fg="#16FE10", width=5,height=3)
         self.start_button.bind("<Button-3>", lambda event: self.right_click("Button which tells snake robot to start moving"))
-        self.start_button.place(x=650, y=100)
+        self.start_button.place(x=700, y=120)
 
         self.stop_button = tk.Button(self.root, text="STOP", font=16,command=lambda: self.movement_fun("Snake stop request send", STOPPED))
-        self.stop_button.configure(bg="#BF0F0F", fg="#F71923", width=6, height=3)
+        self.stop_button.configure(bg="#BF0F0F", fg="#F71923", width=5, height=3)
         self.stop_button.bind("<Button-3>", lambda event: self.right_click("Button which tells snake robot to stop moving"))
-        self.stop_button.place(x=550, y=100)
+        self.stop_button.place(x=430, y=120)
         
         self.stretch_button = tk.Button(self.root, text="CALIBRATE", font=16, command=lambda: self.movement_fun("Set all servos to 0 degrees request send", CALIBRATED))
-        self.stretch_button.configure(bg="#00ffff", fg="blue", width=6, height=3)
+        self.stretch_button.configure(bg="#00ffff", fg="blue", width=15, height=1)
         self.stretch_button.bind("<Button-3>", lambda event: self.right_click("Set all servos in robot to zero degrees"))
-        self.stretch_button.place(x=450, y=100)
+        self.stretch_button.place(x=520, y=70)
+
+        self.left_button = tk.Button(self.root, text="LEFT", font=16,command=lambda: self.movement_fun("Left side move request send", LEFT))
+        self.left_button.configure(bg="#0C7D09", fg="#16FE10", width=10, height=1)
+        self.left_button.bind("<Button-3>", lambda event: self.right_click("Set all servos in robot to zero degrees"))
+        self.left_button.place(x=540, y=120)
+        self.right_button = tk.Button(self.root, text="RIGHT", font=16,command=lambda: self.movement_fun("Right side move request send", RIGHT))
+        self.right_button.configure(bg="#0C7D09", fg="#16FE10", width=10, height=1)
+        self.right_button.bind("<Button-3>", lambda event: self.right_click("Set all servos in robot to zero degrees"))
+        self.right_button.place(x=540, y=160)
         #END OF MOVEMENT WINDOW
         #CONNECTION SETTINGS WINDOW
         self.conn_label = tk.Label(self.root, text="CONNECTION SETTINGS", font=12)
