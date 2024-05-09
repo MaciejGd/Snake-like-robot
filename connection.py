@@ -145,7 +145,7 @@ class Gui:
         self.stop_button.bind("<Button-3>", lambda event: self.right_click("Button which tells snake robot to stop moving"))
         self.stop_button.place(x=430, y=120)
         
-        self.stretch_button = tk.Button(self.root, text="CALIBRATE", font=16, command=lambda: self.movement_fun("Set all servos to 0 degrees request send", CALIBRATED))
+        self.stretch_button = tk.Button(self.root, text="HOME", font=16, command=lambda: self.movement_fun("Set all servos to 0 degrees request send", CALIBRATED))
         self.stretch_button.configure(bg="#00ffff", fg="blue", width=15, height=1)
         self.stretch_button.bind("<Button-3>", lambda event: self.right_click("Set all servos in robot to zero degrees"))
         self.stretch_button.place(x=520, y=70)
