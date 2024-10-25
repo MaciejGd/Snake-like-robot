@@ -1,5 +1,7 @@
 # Snake-like-robot
 
+## Robot project, and creation based on arm microprocessors
+
 Here is code for controlling snake-like robot created by me. Snake is build of ten independent modules, every equipped with its own microcontroller for controlling movement. PCBs with microcontrollers has been designed by me, png of electrical connections and elements are placed in a repository in PCB-scheme.png file, layout of pcb is placed in PCB-layout.png. The first module is snake's head responsible for sending requsts to other elements. Snake is controlled by external device via bluetooth communication. For this purpose i use module HC-05 connected to microcontrollers UART. Upon receiving request from external bluetooth device snake's head is interpreting the request and sending request's for starting or stopping movement of other modules using rs485 electrical standard and my version of simplified modbus as protocol. Code responsible for master in connection (snake head) is placed under c_code/master and code for slave in c_code/slave dirs.
 
 ## Application for controlling wireless connection
